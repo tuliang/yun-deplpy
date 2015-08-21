@@ -1,17 +1,19 @@
 # config valid only for current version of Capistrano
 lock '3.4.0'
 
-set :application, 'my_app_name'
-set :repo_url, 'git@example.com:me/my_repo.git'
+set :application, 'yun-deploy-rails'
+set :deploy_user, 'root'
+set :repo_url, 'https://github.com/tuliang/yun-deploy-rails.git'
 
 # Default branch is :master
 # ask :branch, `git rev-parse --abbrev-ref HEAD`.chomp
 
 # Default deploy_to directory is /var/www/my_app_name
 # set :deploy_to, '/var/www/my_app_name'
+set :deploy_to, "/home/#{fetch(:deploy_user)}/apps/#{fetch(:application)}"
 
 # Default value for :scm is :git
-# set :scm, :git
+set :scm, :git
 
 # Default value for :format is :pretty
 # set :format, :pretty
@@ -32,17 +34,46 @@ set :repo_url, 'git@example.com:me/my_repo.git'
 # set :default_env, { path: "/opt/ruby/bin:$PATH" }
 
 # Default value for keep_releases is 5
-# set :keep_releases, 5
+set :keep_releases, 5
 
 namespace :deploy do
 
-  after :restart, :clear_cache do
-    on roles(:web), in: :groups, limit: 3, wait: 10 do
-      # Here we can do anything such as:
-      # within release_path do
-      #   execute :rake, 'cache:clear'
-      # end
+  task :restart do
+    on roles(:web), in: :sequence, wait: 3 do
+      within release_path do
+        execute 'echo "stop ===>"'
+        execute "docker kill $(docker ps -q)"
+        
+        execute 'echo "start ===>"'
+        execute "cd #{release_path} && docker-compose build && docker-compose up -d"
+      end
     end
   end
 
+  task :install do
+    on roles(:app) do
+      base_install
+      docker_install
+      docker_compose_install
+    end
+  end
+
+  def base_install
+    execute "sudo apt-get update"
+    execute "sudo apt-get install -y curl"
+  end
+
+  def docker_install
+    execute "curl -sSL https://get.docker.com/ | sh"
+    execute "docker -v"
+  end
+
+  def docker_compose_install
+    execute "apt-get -y install python-pip"
+    execute "pip install -U docker-compose"
+    execute "chmod +x /usr/local/bin/docker-compose"
+    execute "docker-compose -v"
+  end
+
+  after :published, :restart
 end
